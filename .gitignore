@@ -5,7 +5,7 @@ Release/
 *.obj
 *.ilk
 *.pdb
-.sln
-.vcxproj
-.vcxproj.filters
-.vcxproj.user
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
