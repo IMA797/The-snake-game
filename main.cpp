@@ -133,7 +133,7 @@ bool IsPositionFreeForFood(int x, int y, vector<Enemy*>& enemies)
         int dx = x - enemies[i]->GetX();
         int dy = y - enemies[i]->GetY();
         int dist2 = dx * dx + dy * dy;
-        if (dist2 < 900) // 30*30 - минимальное расстояние
+        if (dist2 < 1600) // 40*40 - минимальное расстояние
             return false;
     }
     return true;
@@ -213,6 +213,8 @@ int main()
     //Отрисовка всего
     DrawAll(head, body, foodCircle, foodTriangle, enemies);
 
+    int level = 1;
+
     while (true)
     {
         if (GetAsyncKeyState(VK_ESCAPE) & 0x8000) break;
@@ -255,17 +257,35 @@ int main()
                     enemies[i]->Move(fieldX + fieldW / 2, fieldY + fieldH / 2, fieldW / 2);
                 }
 
-                // Проверка столкновения с врагами
+                // Проверка столкновения головы с врагами
                 for (int i = 0; i < (int)enemies.size(); i++)
                 {
                     int d = (head->GetRadius() + enemies[i]->GetRadius());
                     d *= d;
                     if (Dist2(head->GetX(), head->GetY(), enemies[i]->GetX(), enemies[i]->GetY()) <= d)
                     {
-                        cout << "Столкновение с врагом! Игра окончена!" << endl;
+                        cout << "Столкновение головы с врагом! Игра окончена!" << endl;
                         hit = true;
                         break;
                     }
+                }
+                if (hit) break;
+
+                // Проверка столкновения тела с врагами
+                for (int i = 0; i < (int)body.size(); i++)
+                {
+                    for (int j = 0; j < (int)enemies.size(); j++)
+                    {
+                        int d = (body[i]->GetRadius() + enemies[j]->GetRadius());
+                        d *= d;
+                        if (Dist2(body[i]->GetX(), body[i]->GetY(), enemies[j]->GetX(), enemies[j]->GetY()) <= d)
+                        {
+                            cout << "Столкновение тела с врагом! Игра окончена!" << endl;
+                            hit = true;
+                            break;
+                        }
+                    }
+                    if (hit) break;
                 }
                 if (hit) break;
             }
@@ -340,8 +360,12 @@ int main()
             }
 
             //Появление врагов на 2 уровне
-            if (score >= 5 && enemyCount == 0)
+            if (score >= 5 && enemyCount == 0) 
             {
+                level = 2;
+                // Меняем цвет фона на светло-серый/голубоватый
+                DeleteObject(whiteBrush);  // удаляем старую кисть
+                whiteBrush = CreateSolidBrush(RGB(200, 220, 255));  // светло-голубой фон
                 for (int i = 0; i < 5; i++)
                 {
                     int ex, ey;
@@ -355,7 +379,6 @@ int main()
                     enemies.push_back(e);
                 }
                 enemyCount = (int)enemies.size();
-                cout << "=== УРОВЕНЬ 2! Появились враги! ===" << endl;
             }
         }
 

@@ -458,10 +458,21 @@ void Enemy::Move(int centerX, int centerY, int fieldRadius)
     int dy = newY - centerY;
     int safeR = fieldRadius - GetRadius();
 
-    if (dx * dx + dy * dy <= safeR * safeR)
+    // Если выходит за границы — отталкиваем обратно
+    if (dx * dx + dy * dy > safeR * safeR)
     {
-        Hide();
-        MoveTo(newX, newY);
-        Show();
+        // Отталкиваем от границы
+        if (newX - GetRadius() < centerX - fieldRadius)
+            newX = centerX - fieldRadius + GetRadius() + 1;
+        if (newX + GetRadius() > centerX + fieldRadius)
+            newX = centerX + fieldRadius - GetRadius() - 1;
+        if (newY - GetRadius() < centerY - fieldRadius)
+            newY = centerY - fieldRadius + GetRadius() + 1;
+        if (newY + GetRadius() > centerY + fieldRadius)
+            newY = centerY + fieldRadius - GetRadius() - 1;
     }
+
+    Hide();
+    MoveTo(newX, newY);
+    Show();
 }
