@@ -380,3 +380,88 @@ void SnakeBody::DrawToDC(HDC targetDC)
     DeleteObject(brush);
 }
 //end SnakeBody::DrawToDC
+
+Enemy::Enemy(int InitX, int InitY) : Figure(InitX, InitY)
+{
+    borderColor = RGB(255, 0, 0);
+    fillColor = RGB(255, 0, 0);
+    lineWidth = 2;
+    SetRadius(12);
+}
+
+Enemy::~Enemy()
+{
+
+}
+
+void Enemy::Show()
+{
+    visible = true;
+    HPEN pen = CreatePen(PS_SOLID, lineWidth, borderColor);
+    HBRUSH brush = CreateSolidBrush(fillColor);
+    HPEN oldPen = (HPEN)SelectObject(hdc, pen);
+    HBRUSH oldBrush = (HBRUSH)SelectObject(hdc, brush);
+    Ellipse(hdc, x - radius, y - radius, x + radius, y + radius);
+    SelectObject(hdc, oldPen);
+    SelectObject(hdc, oldBrush);
+    DeleteObject(pen);
+    DeleteObject(brush);
+}
+
+void Enemy::Hide()
+{
+    if (!visible) return;
+    HPEN pen = CreatePen(PS_SOLID, 1, RGB(255, 255, 255));
+    HBRUSH brush = CreateSolidBrush(RGB(255, 255, 255));
+    HPEN oldPen = (HPEN)SelectObject(hdc, pen);
+    HBRUSH oldBrush = (HBRUSH)SelectObject(hdc, brush);
+    Ellipse(hdc, x - radius, y - radius, x + radius, y + radius);
+    SelectObject(hdc, oldPen);
+    SelectObject(hdc, oldBrush);
+    DeleteObject(pen);
+    DeleteObject(brush);
+    visible = false;
+}
+
+void Enemy::DrawToDC(HDC targetDC)
+{
+    HPEN pen = CreatePen(PS_SOLID, lineWidth, borderColor);
+    HBRUSH brush = CreateSolidBrush(fillColor);
+    HPEN oldPen = (HPEN)SelectObject(targetDC, pen);
+    HBRUSH oldBrush = (HBRUSH)SelectObject(targetDC, brush);
+    Ellipse(targetDC, x - radius, y - radius, x + radius, y + radius);
+    SelectObject(targetDC, oldPen);
+    SelectObject(targetDC, oldBrush);
+    DeleteObject(pen);
+    DeleteObject(brush);
+}
+
+void Enemy::Move(int centerX, int centerY, int fieldRadius)
+{
+    int newX = GetX();
+    int newY = GetY();
+    int dir = rand() % 8;
+
+    switch (dir)
+    {
+    case 0: newX += 5; break;
+    case 1: newX -= 5; break;
+    case 2: newY += 5; break;
+    case 3: newY -= 5; break;
+    case 4: newX += 5; newY += 5; break;
+    case 5: newX += 5; newY -= 5; break;
+    case 6: newX -= 5; newY += 5; break;
+    case 7: newX -= 5; newY -= 5; break;
+    }
+
+    int dx = newX - centerX;
+    int dy = newY - centerY;
+    int safeR = fieldRadius - GetRadius();
+
+    if (dx * dx + dy * dy <= safeR * safeR)
+    {
+        Hide();
+        MoveTo(newX, newY);
+        Show();
+    }
+}

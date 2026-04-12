@@ -7,7 +7,7 @@
 * Language      : C++                                             *
 * Programmer    : Исаев Магомед Абдурахманович                    *
 * Created       : 29/03/26                                        *
-* Last Revision : 4/04/26                                         *
+* Last Revision : 12/04/26                                        *
 * Comment       : Игра "Змейка"                                   *
 ******************************************************************/
 
@@ -62,6 +62,7 @@ void InitBuffer()
     //Привязываем картинку к виртуальному экрану
     SelectObject(bufferDC, bufferBitmap);
 }
+
 //отрисовка игрового поля
 void DrawField()
 {
@@ -69,12 +70,11 @@ void DrawField()
     SelectObject(bufferDC, borderPen);
     SelectObject(bufferDC, borderBrush);
     //Рисуем черный контур и внутри пусто
-    //В аргументе: координаты левого верхнего угла, и нижнего правого угла
     Rectangle(bufferDC, fieldX, fieldY, fieldX + fieldW, fieldY + fieldH);
 }
 
 //Отрисовка игры
-void DrawAll(SnakeHead* head, vector<SnakeBody*>& body, Circle* foodCircle, Triangle* foodTriangle)
+void DrawAll(SnakeHead* head, vector<SnakeBody*>& body, Circle* foodCircle, Triangle* foodTriangle, vector<Enemy*>& enemies)
 {
     //Очистка экрана, то есть заливка его большим прямоугольником 
     SelectObject(bufferDC, whiteBrush);
@@ -83,9 +83,7 @@ void DrawAll(SnakeHead* head, vector<SnakeBody*>& body, Circle* foodCircle, Tria
     //Рисуем рамку экрана
     DrawField();
 
-    /*Тело змейки
-    Вначале рисуется тело, а потом голова
-    Если рисовать наоборот, то тело может быть свеху головы*/
+    //Тело змейки (рисуем с конца, чтобы голова была сверху)
     for (int i = (int)body.size() - 1; i >= 0; i--)
         body[i]->DrawToDC(bufferDC);
 
@@ -96,14 +94,11 @@ void DrawAll(SnakeHead* head, vector<SnakeBody*>& body, Circle* foodCircle, Tria
     foodCircle->DrawToDC(bufferDC);
     foodTriangle->DrawToDC(bufferDC);
 
-    /*Перенос на экран
-    hdc - дескриптор контекста экрана
-    0, 0 - левый верхний угол экрана
-    screenWidth - ширина экрана
-    screenHeight - высота экрана
-    bufferDC - конттекст буфера
-    0, 0 - координаты в буфере
-    SRCCOPY - операция копирования*/
+    // Рисуем врагов
+    for (int i = 0; i < (int)enemies.size(); i++)
+        enemies[i]->DrawToDC(bufferDC);
+
+    //Перенос на экран
     BitBlt(hdc, 0, 0, screenWidth, screenHeight, bufferDC, 0, 0, SRCCOPY);
 }
 
@@ -114,6 +109,7 @@ bool CheckBoundary(int x, int y, int radius)
         y - radius >= fieldY && y + radius <= fieldY + fieldH);
 }
 
+//Перекраска тела
 void recolorBody(vector<SnakeBody*>& body, COLORREF newColor)
 {
     for (int i = 0; i < (int)body.size(); i++)
@@ -121,6 +117,26 @@ void recolorBody(vector<SnakeBody*>& body, COLORREF newColor)
         body[i]->SetFillColor(newColor);
         body[i]->SetBorderColor(newColor);
     }
+}
+
+//Проверка, свободна ли позиция для еды (не на врагах)
+bool IsPositionFreeForFood(int x, int y, vector<Enemy*>& enemies)
+{
+    // Проверка границ поля с отступом
+    if (x - 15 < fieldX || x + 15 > fieldX + fieldW ||
+        y - 15 < fieldY || y + 15 > fieldY + fieldH)
+        return false;
+
+    // Проверка на врагов
+    for (int i = 0; i < (int)enemies.size(); i++)
+    {
+        int dx = x - enemies[i]->GetX();
+        int dy = y - enemies[i]->GetY();
+        int dist2 = dx * dx + dy * dy;
+        if (dist2 < 900) // 30*30 - минимальное расстояние
+            return false;
+    }
+    return true;
 }
 
 int main()
@@ -138,14 +154,10 @@ int main()
     if (!hdc)
         return 2;  //Ошибка: контекст устройства не получен
 
-    //Открываем на весь экран (SW_SHOWMAXIMIZED - команда "развернуть на весь экран)
+    //Открываем на весь экран
     ShowWindow(hwnd, SW_SHOWMAXIMIZED);
 
-    /*Получаем размер полученного окна (сначала открываем на весь экран, а потом получаем размер): ширина и высота
-    rect - структура, которая описывает прямоугольник.
-    В нем хранится 4 числа: координаты левого, правого, верхнего и нижнего краев
-    GetClientRect - заполняем структуру rect текущими размерами окна
-    Нужно для создания буфера под размер окна*/
+    //Получаем размер окна
     RECT rect;
     GetClientRect(hwnd, &rect);
     screenWidth = rect.right;
@@ -158,8 +170,7 @@ int main()
     fieldY = (screenHeight - fieldH) / 2;
     COLORREF bodyColor = RGB(0, 100, 0);
 
-    //Кисти и перья, необходимые для рисования: 
-    //Белая кисть, пустая кисть и черное перо
+    //Кисти и перья
     whiteBrush = CreateSolidBrush(RGB(255, 255, 255));
     borderBrush = (HBRUSH)GetStockObject(NULL_BRUSH);
     borderPen = CreatePen(PS_SOLID, 3, RGB(0, 0, 0));
@@ -167,42 +178,40 @@ int main()
     //Создаем буфер
     InitBuffer();
 
-    //Создание змейки: голова одна (по центру поля), тело - хранится в векторе (вначале отрисовывается слева от головы)
+    //Создание змейки
     SnakeHead* head = new SnakeHead(fieldX + fieldW / 2, fieldY + fieldH / 2);
     head->SetRadius(15);
 
-    //Вектор указателей на тело (SnakeBody)
     vector<SnakeBody*> body;
-    //Тело смещено от центра на 30 
     SnakeBody* body1 = new SnakeBody(fieldX + fieldW / 2 - 30, fieldY + fieldH / 2);
     body1->SetRadius(15);
     body.push_back(body1);
 
-    //Создание еды: круга и треугольника
+    //Создание еды
     Circle* foodCircle = new Circle(0, 0);
     Triangle* foodTriangle = new Triangle(0, 0);
     foodCircle->SetRadius(12);
     foodTriangle->SetRadius(12);
 
-    //Создаем случайные позиции для еды
+    //Создаем случайные позиции для еды (врагов ещё нет)
     foodCircle->MoveTo(rand() % (fieldW - 100) + fieldX + 50, rand() % (fieldH - 100) + fieldY + 50);
     foodTriangle->MoveTo(rand() % (fieldW - 100) + fieldX + 50, rand() % (fieldH - 100) + fieldY + 50);
 
     //Счет игры
     int score = 0;
-    //Текущее направление (вправо)
     int dirX = 1, dirY = 0;
-    //Прошлое направление
     int oldDirX = 1, oldDirY = 0;
-    //Сколько сегментов добавляется
     int pendingGrowth = 0;
-    //Нужно для задержки движения
     int moveDelay = 0;
+
+    //Враги
+    vector<Enemy*> enemies;
+    int enemyCount = 0;
 
     cin.get();
 
     //Отрисовка всего
-    DrawAll(head, body, foodCircle, foodTriangle);
+    DrawAll(head, body, foodCircle, foodTriangle, enemies);
 
     while (true)
     {
@@ -218,10 +227,8 @@ int main()
         {
             moveDelay = 0;
 
-            //Сохраняем старые позиции головы
             int oldHeadX = head->GetX();
             int oldHeadY = head->GetY();
-            //Новые координаты: шаг - 15 пикселей
             int newX = oldHeadX + dirX * 31;
             int newY = oldHeadY + dirY * 31;
 
@@ -234,22 +241,40 @@ int main()
 
             //Движение тела
             for (int i = (int)body.size() - 1; i > 0; i--)
-                //каждый новый сегмент во время движения становится на место предыдущего 
                 body[i]->MoveTo(body[i - 1]->GetX(), body[i - 1]->GetY());
             body[0]->MoveTo(oldHeadX, oldHeadY);
-            //Движение головы
             head->MoveTo(newX, newY);
 
-            //Флаг столкновения с телом (true - есть столкновение, false - иначе)
             bool hit = false;
 
-            //Проходимся по всем сегментам тела
+            //Движение и проверка врагов
+            if (enemyCount > 0)
+            {
+                for (int i = 0; i < (int)enemies.size(); i++)
+                {
+                    enemies[i]->Move(fieldX + fieldW / 2, fieldY + fieldH / 2, fieldW / 2);
+                }
+
+                // Проверка столкновения с врагами
+                for (int i = 0; i < (int)enemies.size(); i++)
+                {
+                    int d = (head->GetRadius() + enemies[i]->GetRadius());
+                    d *= d;
+                    if (Dist2(head->GetX(), head->GetY(), enemies[i]->GetX(), enemies[i]->GetY()) <= d)
+                    {
+                        cout << "Столкновение с врагом! Игра окончена!" << endl;
+                        hit = true;
+                        break;
+                    }
+                }
+                if (hit) break;
+            }
+
+            // Проверка столкновения с телом
             for (int i = 0; i < (int)body.size(); i++)
             {
-                //Расстояние, при котором голова и сегмент касаются друг друга (квадрат суммы радиусов)
                 int d = (head->GetRadius() + body[i]->GetRadius());
                 d *= d;
-                //Сравнение квадрат реального расстояния с квадратом суммы радиусов
                 if (Dist2(head->GetX(), head->GetY(), body[i]->GetX(), body[i]->GetY()) <= d)
                 {
                     hit = true;
@@ -262,7 +287,7 @@ int main()
                 break;
             }
 
-            //Цикл добавления нового сегмента тела
+            //Добавление новых сегментов
             while (pendingGrowth > 0)
             {
                 SnakeBody* newBody = new SnakeBody(oldHeadX, oldHeadY);
@@ -273,11 +298,10 @@ int main()
                 pendingGrowth--;
             }
 
-            //Запоминаем направления для следующего шага
             oldDirX = dirX;
             oldDirY = dirY;
 
-            //Проверка поедания круга (он добавляет 1 сегмент)
+            // Проверка поедания круга
             int dist = (head->GetRadius() + foodCircle->GetRadius());
             dist *= dist;
             if (Dist2(head->GetX(), head->GetY(), foodCircle->GetX(), foodCircle->GetY()) <= dist)
@@ -286,10 +310,17 @@ int main()
                 pendingGrowth += 1;
                 bodyColor = RGB(255, 0, 0);
                 recolorBody(body, bodyColor);
-                foodCircle->MoveTo(rand() % (fieldW - 100) + fieldX + 50, rand() % (fieldH - 100) + fieldY + 50);
+
+                // Новая позиция для еды (не на врагах)
+                int newXfood, newYfood;
+                do {
+                    newXfood = rand() % (fieldW - 100) + fieldX + 50;
+                    newYfood = rand() % (fieldH - 100) + fieldY + 50;
+                } while (!IsPositionFreeForFood(newXfood, newYfood, enemies));
+                foodCircle->MoveTo(newXfood, newYfood);
             }
 
-            //Проверка поедания треугольника (он добавляет 2 сегмента)
+            // Проверка поедания треугольника
             dist = (head->GetRadius() + foodTriangle->GetRadius());
             dist *= dist;
             if (Dist2(head->GetX(), head->GetY(), foodTriangle->GetX(), foodTriangle->GetY()) <= dist)
@@ -298,12 +329,38 @@ int main()
                 pendingGrowth += 2;
                 bodyColor = RGB(0, 0, 255);
                 recolorBody(body, bodyColor);
-                foodTriangle->MoveTo(rand() % (fieldW - 100) + fieldX + 50, rand() % (fieldH - 100) + fieldY + 50);
+
+                // Новая позиция для еды (не на врагах)
+                int newXfood, newYfood;
+                do {
+                    newXfood = rand() % (fieldW - 100) + fieldX + 50;
+                    newYfood = rand() % (fieldH - 100) + fieldY + 50;
+                } while (!IsPositionFreeForFood(newXfood, newYfood, enemies));
+                foodTriangle->MoveTo(newXfood, newYfood);
+            }
+
+            //Появление врагов на 2 уровне
+            if (score >= 5 && enemyCount == 0)
+            {
+                for (int i = 0; i < 5; i++)
+                {
+                    int ex, ey;
+                    do {
+                        ex = fieldX + rand() % fieldW;
+                        ey = fieldY + rand() % fieldH;
+                    } while (!IsPositionFreeForFood(ex, ey, enemies));
+
+                    Enemy* e = new Enemy(ex, ey);
+                    e->SetRadius(12);
+                    enemies.push_back(e);
+                }
+                enemyCount = (int)enemies.size();
+                cout << "=== УРОВЕНЬ 2! Появились враги! ===" << endl;
             }
         }
 
-        //Перерисовываем все
-        DrawAll(head, body, foodCircle, foodTriangle);
+        //Перерисовка
+        DrawAll(head, body, foodCircle, foodTriangle, enemies);
         Sleep(16);
     }
 
@@ -313,14 +370,13 @@ int main()
     DeleteObject(whiteBrush);
     DeleteObject(borderPen);
 
-    //Удаляем голову, тело, еду
     delete head;
     for (int i = 0; i < (int)body.size(); i++)
-    {
         delete body[i];
-    }
     delete foodCircle;
     delete foodTriangle;
+    for (int i = 0; i < (int)enemies.size(); i++)
+        delete enemies[i];
 
     cout << "Ваш счет: " << score << endl << "Нажмите Enter для выхода..." << endl;
     cin.get();

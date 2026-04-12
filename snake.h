@@ -118,3 +118,14 @@ public:
 
     void DrawToDC(HDC targetDC) override;
 };
+
+class Enemy : public Figure
+{
+public:
+    Enemy(int InitX, int InitY);
+    ~Enemy();
+    void Show() override;          
+    void Hide() override;
+    void DrawToDC(HDC targetDC);    
+    void Move(int centerX, int centerY, int fieldRadius);
+};
