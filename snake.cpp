@@ -1,5 +1,6 @@
 #include "snake.h"
 #include <windows.h>
+#include <vector>
 
 extern HDC hdc;
 
@@ -381,19 +382,22 @@ void SnakeBody::DrawToDC(HDC targetDC)
 }
 //end SnakeBody::DrawToDC
 
+//start Enemy::Enemy
 Enemy::Enemy(int InitX, int InitY) : Figure(InitX, InitY)
 {
     borderColor = RGB(255, 0, 0);
     fillColor = RGB(255, 0, 0);
     lineWidth = 2;
     SetRadius(12);
-}
+}//end Enemy::Enemy
 
+//start Enemy::~Enemy
 Enemy::~Enemy()
 {
 
-}
+}//end Enemy::~Enemy
 
+//start Enemy::Show
 void Enemy::Show()
 {
     visible = true;
@@ -406,8 +410,9 @@ void Enemy::Show()
     SelectObject(hdc, oldBrush);
     DeleteObject(pen);
     DeleteObject(brush);
-}
+}//end Enemy::Show
 
+//start Enemy::Hide
 void Enemy::Hide()
 {
     if (!visible) return;
@@ -421,8 +426,9 @@ void Enemy::Hide()
     DeleteObject(pen);
     DeleteObject(brush);
     visible = false;
-}
+}//end Enemy::Hide
 
+//start Enemy::DrawToDC
 void Enemy::DrawToDC(HDC targetDC)
 {
     HPEN pen = CreatePen(PS_SOLID, lineWidth, borderColor);
@@ -434,9 +440,25 @@ void Enemy::DrawToDC(HDC targetDC)
     SelectObject(targetDC, oldBrush);
     DeleteObject(pen);
     DeleteObject(brush);
-}
+}//end DrawToDC
 
-void Enemy::Move(int centerX, int centerY, int fieldRadius)
+// Проверка, не столкнулся ли враг со стеной
+//start CheckEnemyWallCollision
+bool CheckEnemyWallCollision(int newX, int newY, int radius, std::vector<Wall*>& walls)
+{
+    for (int i = 0; i < (int)walls.size(); i++)
+    {
+        if (newX + radius > walls[i]->GetX() && newX - radius < walls[i]->GetX() + walls[i]->GetW() &&
+            newY + radius > walls[i]->GetY() && newY - radius < walls[i]->GetY() + walls[i]->GetH())
+        {
+            return true;
+        }
+    }
+    return false;
+}//end CheckEnemyWallCollision
+
+//start Enemy::Move
+void Enemy::Move(int centerX, int centerY, int fieldRadius, std::vector<Wall*>& walls)
 {
     int newX = GetX();
     int newY = GetY();
@@ -454,25 +476,86 @@ void Enemy::Move(int centerX, int centerY, int fieldRadius)
     case 7: newX -= 5; newY -= 5; break;
     }
 
-    int dx = newX - centerX;
-    int dy = newY - centerY;
-    int safeR = fieldRadius - GetRadius();
+    // Принудительно удерживаем врага в пределах поля
+    int radius = GetRadius();
+    int leftBound = centerX - fieldRadius + radius;
+    int rightBound = centerX + fieldRadius - radius;
+    int topBound = centerY - fieldRadius + radius;
+    int bottomBound = centerY + fieldRadius - radius;
 
-    // Если выходит за границы — отталкиваем обратно
-    if (dx * dx + dy * dy > safeR * safeR)
+    if (newX < leftBound) newX = leftBound;
+    if (newX > rightBound) newX = rightBound;
+    if (newY < topBound) newY = topBound;
+    if (newY > bottomBound) newY = bottomBound;
+
+    // Проверка столкновения со стенами
+    bool validMove = !CheckEnemyWallCollision(newX, newY, radius, walls);
+
+    if (validMove)
     {
-        // Отталкиваем от границы
-        if (newX - GetRadius() < centerX - fieldRadius)
-            newX = centerX - fieldRadius + GetRadius() + 1;
-        if (newX + GetRadius() > centerX + fieldRadius)
-            newX = centerX + fieldRadius - GetRadius() - 1;
-        if (newY - GetRadius() < centerY - fieldRadius)
-            newY = centerY - fieldRadius + GetRadius() + 1;
-        if (newY + GetRadius() > centerY + fieldRadius)
-            newY = centerY + fieldRadius - GetRadius() - 1;
+        Hide();
+        MoveTo(newX, newY);
+        Show();
     }
+}//end Enemy::Move
 
-    Hide();
-    MoveTo(newX, newY);
-    Show();
-}
+//start Wall::Wall
+Wall::Wall(int InitX, int InitY, int width, int height) : Figure(InitX, InitY)
+{
+    borderColor = RGB(100, 100, 100);
+    fillColor = RGB(100, 100, 100);
+    lineWidth = 2;
+    w = width;
+    h = height;
+    SetRadius(0);
+}//end Wall::Wall
+
+//start Wall::~Wall
+Wall::~Wall() 
+{
+}//end Wall::~Wall
+
+//start Wall::Show
+void Wall::Show()
+{
+    visible = true;
+    HPEN pen = CreatePen(PS_SOLID, lineWidth, borderColor);
+    HBRUSH brush = CreateSolidBrush(fillColor);
+    HPEN oldPen = (HPEN)SelectObject(hdc, pen);
+    HBRUSH oldBrush = (HBRUSH)SelectObject(hdc, brush);
+    Rectangle(hdc, x, y, x + w, y + h);
+    SelectObject(hdc, oldPen);
+    SelectObject(hdc, oldBrush);
+    DeleteObject(pen);
+    DeleteObject(brush);
+}//end Wall::Show
+
+//start Wall::Hide
+void Wall::Hide()
+{
+    if (!visible) return;
+    HPEN pen = CreatePen(PS_SOLID, 1, RGB(255, 255, 255));
+    HBRUSH brush = CreateSolidBrush(RGB(255, 255, 255));
+    HPEN oldPen = (HPEN)SelectObject(hdc, pen);
+    HBRUSH oldBrush = (HBRUSH)SelectObject(hdc, brush);
+    Rectangle(hdc, x, y, x + w, y + h);
+    SelectObject(hdc, oldPen);
+    SelectObject(hdc, oldBrush);
+    DeleteObject(pen);
+    DeleteObject(brush);
+    visible = false;
+}//end Wall::Hide
+
+//start Wall::DrawToDC
+void Wall::DrawToDC(HDC targetDC)
+{
+    HPEN pen = CreatePen(PS_SOLID, lineWidth, borderColor);
+    HBRUSH brush = CreateSolidBrush(fillColor);
+    HPEN oldPen = (HPEN)SelectObject(targetDC, pen);
+    HBRUSH oldBrush = (HBRUSH)SelectObject(targetDC, brush);
+    Rectangle(targetDC, x, y, x + w, y + h);
+    SelectObject(targetDC, oldPen);
+    SelectObject(targetDC, oldBrush);
+    DeleteObject(pen);
+    DeleteObject(brush);
+}//end Wall::DrawToDC

@@ -74,7 +74,7 @@ void DrawField()
 }
 
 //Отрисовка игры
-void DrawAll(SnakeHead* head, vector<SnakeBody*>& body, Circle* foodCircle, Triangle* foodTriangle, vector<Enemy*>& enemies)
+void DrawAll(SnakeHead* head, vector<SnakeBody*>& body, Circle* foodCircle, Triangle* foodTriangle, vector<Enemy*>& enemies, vector<Wall*>& walls)
 {
     //Очистка экрана, то есть заливка его большим прямоугольником 
     SelectObject(bufferDC, whiteBrush);
@@ -98,6 +98,10 @@ void DrawAll(SnakeHead* head, vector<SnakeBody*>& body, Circle* foodCircle, Tria
     for (int i = 0; i < (int)enemies.size(); i++)
         enemies[i]->DrawToDC(bufferDC);
 
+    // Рисуем стены
+    for (int i = 0; i < (int)walls.size(); i++)
+        walls[i]->DrawToDC(bufferDC);
+
     //Перенос на экран
     BitBlt(hdc, 0, 0, screenWidth, screenHeight, bufferDC, 0, 0, SRCCOPY);
 }
@@ -105,6 +109,11 @@ void DrawAll(SnakeHead* head, vector<SnakeBody*>& body, Circle* foodCircle, Tria
 //Проверка выхода за игровое поле
 bool CheckBoundary(int x, int y, int radius)
 {
+    /*Проверка, что:
+    левый край объекта не левее левой границы поля
+    правй край объекта не правее правой границы поля
+    верхний край объейкта не выше верхней границы поля 
+    нижний край объекта не ниже нижней границы поля*/
     return (x - radius >= fieldX && x + radius <= fieldX + fieldW &&
         y - radius >= fieldY && y + radius <= fieldY + fieldH);
 }
@@ -119,25 +128,141 @@ void recolorBody(vector<SnakeBody*>& body, COLORREF newColor)
     }
 }
 
-//Проверка, свободна ли позиция для еды (не на врагах)
-bool IsPositionFreeForFood(int x, int y, vector<Enemy*>& enemies)
+//Проверка, свободна ли позиция для еды, чтоб она не была за пределами игрового поля и не слишком близко к врагам
+bool IsPositionFreeForFood(int x, int y, vector<Enemy*>& enemies, vector<Wall*>& walls)
 {
-    // Проверка границ поля с отступом
+    //Проверка границ поля с отступом для еды
+    //Если хоть одно условие истинно - то еда вылезает за границу
     if (x - 15 < fieldX || x + 15 > fieldX + fieldW ||
         y - 15 < fieldY || y + 15 > fieldY + fieldH)
         return false;
 
-    // Проверка на врагов
+    // Проверка, что еда не слищком близка к врагу
     for (int i = 0; i < (int)enemies.size(); i++)
     {
+        //Разница координат между едой и врагом
         int dx = x - enemies[i]->GetX();
         int dy = y - enemies[i]->GetY();
+        //Квадрат расстояний
         int dist2 = dx * dx + dy * dy;
-        if (dist2 < 1600) // 40*40 - минимальное расстояние
+        if (dist2 < 1600) // 40*40 - минимальное расстояние, чтоб еда и враги не были слишком близки
+            return false;
+    }
+
+    // Проверка, что еда не на стене
+    for (int i = 0; i < (int)walls.size(); i++)
+    {
+        // Проверка пересечения круга еды (радиус 12) с прямоугольником стены
+        if (x + 12 > walls[i]->GetX() && x - 12 < walls[i]->GetX() + walls[i]->GetW() &&
+            y + 12 > walls[i]->GetY() && y - 12 < walls[i]->GetY() + walls[i]->GetH())
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+// Проверка столкновения со стенами
+bool CheckWallCollision(int x, int y, int radius, vector<Wall*>& walls)
+{
+
+    for (int i = 0; i < (int)walls.size(); i++)
+    {
+        // Проверка пересечения квадрата головы с прямоугольником стены
+        if (x + radius > walls[i]->GetX() && //Правый край головы > левый край стены
+            x - radius < walls[i]->GetX() + walls[i]->GetW() && //Левый край головы < правый край стены
+            y + radius > walls[i]->GetY() && //Нижний край головы > верхний край стены
+            y - radius < walls[i]->GetY() + walls[i]->GetH()) //Верхний край головы < нижний край стены
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+//Проверка, свободна ли позиция от змеи, еды, врагов и стен
+bool IsPositionFreeForSpawn(int x, int y, int radius,
+    SnakeHead* head, vector<SnakeBody*>& body,
+    Circle* foodCircle, Triangle* foodTriangle,
+    vector<Enemy*>& enemies, vector<Wall*>& walls)
+{
+    //Проверка границ поля
+    if (!CheckBoundary(x, y, radius))
+        return false;
+
+    //Проверка головы
+    int dx = x - head->GetX();
+    int dy = y - head->GetY();
+    if (dx * dx + dy * dy < (radius + head->GetRadius()) * (radius + head->GetRadius()))
+        return false;
+
+    //Проверка тела
+    for (int i = 0; i < (int)body.size(); i++)
+    {
+        dx = x - body[i]->GetX();
+        dy = y - body[i]->GetY();
+        if (dx * dx + dy * dy < (radius + body[i]->GetRadius()) * (radius + body[i]->GetRadius()))
+            return false;
+    }
+
+    //Проверка еды (круг)
+    dx = x - foodCircle->GetX();
+    dy = y - foodCircle->GetY();
+    if (dx * dx + dy * dy < (radius + foodCircle->GetRadius()) * (radius + foodCircle->GetRadius()))
+        return false;
+
+    //Проверка еды (треугольник)
+    dx = x - foodTriangle->GetX();
+    dy = y - foodTriangle->GetY();
+    if (dx * dx + dy * dy < (radius + foodTriangle->GetRadius()) * (radius + foodTriangle->GetRadius()))
+        return false;
+
+    //Проверка существующих врагов
+    for (int i = 0; i < (int)enemies.size(); i++)
+    {
+        dx = x - enemies[i]->GetX();
+        dy = y - enemies[i]->GetY();
+        if (dx * dx + dy * dy < (radius + enemies[i]->GetRadius()) * (radius + enemies[i]->GetRadius()))
+            return false;
+    }
+
+    //Проверка стен
+    if (CheckWallCollision(x, y, radius, walls))
+        return false;
+
+    return true;
+}
+
+//Проверка, не пересекаются ли две стены
+bool WallsCollide(Wall* w1, Wall* w2)
+{
+    /*Два прямоугольника не пересекаются, если один находится полностью:
+    слева от другого
+    справа от другого
+    выше другого
+    ниже другого*/
+    return !(w1->GetX() + w1->GetW() <= w2->GetX() ||
+        w2->GetX() + w2->GetW() <= w1->GetX() ||
+        w1->GetY() + w1->GetH() <= w2->GetY() ||
+        w2->GetY() + w2->GetH() <= w1->GetY());
+}
+
+//Проверка, что новая стена не пересекается с существующими
+bool IsWallPositionFree(int wx, int wy, int ww, int wh, vector<Wall*>& walls)
+{
+    //wx, wy - координаты левого верхнего угла новой стены
+    //ww, wh - ширина и высота новой стены
+    //Создаем новый временный объект с данными аргументами
+    Wall temp(wx, wy, ww, wh);
+    //Перебираем все существующие стены
+    for (int i = 0; i < (int)walls.size(); i++)
+    {
+        if (WallsCollide(&temp, walls[i]))
             return false;
     }
     return true;
 }
+
 
 int main()
 {
@@ -206,12 +331,14 @@ int main()
 
     //Враги
     vector<Enemy*> enemies;
+    vector<Wall*> walls;
     int enemyCount = 0;
+    int wallCount = 0;
 
     cin.get();
 
     //Отрисовка всего
-    DrawAll(head, body, foodCircle, foodTriangle, enemies);
+    DrawAll(head, body, foodCircle, foodTriangle, enemies, walls);
 
     int level = 1;
 
@@ -241,6 +368,15 @@ int main()
                 break;
             }
 
+            
+
+            // Проверка столкновения со стенами (добавить)
+            if (wallCount > 0 && CheckWallCollision(newX, newY, head->GetRadius(), walls))
+            {
+                cout << "Столкновение со стеной-препятствием! Игра окончена!" << endl;
+                break;
+            }
+
             //Движение тела
             for (int i = (int)body.size() - 1; i > 0; i--)
                 body[i]->MoveTo(body[i - 1]->GetX(), body[i - 1]->GetY());
@@ -254,7 +390,7 @@ int main()
             {
                 for (int i = 0; i < (int)enemies.size(); i++)
                 {
-                    enemies[i]->Move(fieldX + fieldW / 2, fieldY + fieldH / 2, fieldW / 2);
+                    enemies[i]->Move(fieldX + fieldW / 2, fieldY + fieldH / 2, fieldW / 2, walls);
                 }
 
                 // Проверка столкновения головы с врагами
@@ -321,7 +457,7 @@ int main()
             oldDirX = dirX;
             oldDirY = dirY;
 
-            // Проверка поедания круга
+            //Проверка поедания круга
             int dist = (head->GetRadius() + foodCircle->GetRadius());
             dist *= dist;
             if (Dist2(head->GetX(), head->GetY(), foodCircle->GetX(), foodCircle->GetY()) <= dist)
@@ -331,16 +467,16 @@ int main()
                 bodyColor = RGB(255, 0, 0);
                 recolorBody(body, bodyColor);
 
-                // Новая позиция для еды (не на врагах)
+                //Новая позиция для еды (не на врагах)
                 int newXfood, newYfood;
                 do {
                     newXfood = rand() % (fieldW - 100) + fieldX + 50;
                     newYfood = rand() % (fieldH - 100) + fieldY + 50;
-                } while (!IsPositionFreeForFood(newXfood, newYfood, enemies));
+                } while (!IsPositionFreeForFood(newXfood, newYfood, enemies, walls));
                 foodCircle->MoveTo(newXfood, newYfood);
             }
 
-            // Проверка поедания треугольника
+            //Проверка поедания треугольника
             dist = (head->GetRadius() + foodTriangle->GetRadius());
             dist *= dist;
             if (Dist2(head->GetX(), head->GetY(), foodTriangle->GetX(), foodTriangle->GetY()) <= dist)
@@ -350,29 +486,29 @@ int main()
                 bodyColor = RGB(0, 0, 255);
                 recolorBody(body, bodyColor);
 
-                // Новая позиция для еды (не на врагах)
+                //Новая позиция для еды (не на врагах)
                 int newXfood, newYfood;
                 do {
                     newXfood = rand() % (fieldW - 100) + fieldX + 50;
                     newYfood = rand() % (fieldH - 100) + fieldY + 50;
-                } while (!IsPositionFreeForFood(newXfood, newYfood, enemies));
+                } while (!IsPositionFreeForFood(newXfood, newYfood, enemies, walls));
                 foodTriangle->MoveTo(newXfood, newYfood);
             }
 
             //Появление врагов на 2 уровне
-            if (score >= 5 && enemyCount == 0) 
+            if (score >= 5 && enemyCount == 0)
             {
                 level = 2;
-                // Меняем цвет фона на светло-серый/голубоватый
-                DeleteObject(whiteBrush);  // удаляем старую кисть
-                whiteBrush = CreateSolidBrush(RGB(200, 220, 255));  // светло-голубой фон
+                DeleteObject(whiteBrush);
+                whiteBrush = CreateSolidBrush(RGB(200, 220, 255));
+
                 for (int i = 0; i < 5; i++)
                 {
                     int ex, ey;
                     do {
                         ex = fieldX + rand() % fieldW;
                         ey = fieldY + rand() % fieldH;
-                    } while (!IsPositionFreeForFood(ex, ey, enemies));
+                    } while (!IsPositionFreeForSpawn(ex, ey, 12, head, body, foodCircle, foodTriangle, enemies, walls));
 
                     Enemy* e = new Enemy(ex, ey);
                     e->SetRadius(12);
@@ -380,10 +516,54 @@ int main()
                 }
                 enemyCount = (int)enemies.size();
             }
+
+            //Появление стен на 3 уровне 
+            if (score >= 10 && wallCount == 0)
+            {
+                wallCount = 1;
+
+                for (int i = 0; i < 5; i++)
+                {
+                    int wx, wy, wtype, ww, wh;
+                    bool bad;
+                    do {
+                        bad = false;
+                        wx = fieldX + 20 + rand() % (fieldW - 100);
+                        wy = fieldY + 20 + rand() % (fieldH - 100);
+                        wtype = rand() % 2;  // только 0 или 1 
+
+                        if (wtype == 0) { ww = 15; wh = 80; }   // вертикальная
+                        else { ww = 80; wh = 15; }              // горизонтальная
+
+                        //Проверка, что стена не выходит за границы поля
+                        if (wx < fieldX || wx + ww > fieldX + fieldW ||
+                            wy < fieldY || wy + wh > fieldY + fieldH)
+                            bad = true;
+
+                        //Проверка, что стена не пересекается с другими стенами
+                        if (!bad && !IsWallPositionFree(wx, wy, ww, wh, walls))
+                            bad = true;
+
+                        //Проверка, что стена не на змее, еде, врагах
+                        if (!bad)
+                        {
+                            if (!IsPositionFreeForSpawn(wx, wy, 0, head, body, foodCircle, foodTriangle, enemies, walls) ||
+                                !IsPositionFreeForSpawn(wx + ww, wy, 0, head, body, foodCircle, foodTriangle, enemies, walls) ||
+                                !IsPositionFreeForSpawn(wx, wy + wh, 0, head, body, foodCircle, foodTriangle, enemies, walls) ||
+                                !IsPositionFreeForSpawn(wx + ww, wy + wh, 0, head, body, foodCircle, foodTriangle, enemies, walls))
+                                bad = true;
+                        }
+
+                    } while (bad);
+
+                    walls.push_back(new Wall(wx, wy, ww, wh));
+                }
+
+            }
         }
 
         //Перерисовка
-        DrawAll(head, body, foodCircle, foodTriangle, enemies);
+        DrawAll(head, body, foodCircle, foodTriangle, enemies, walls);
         Sleep(16);
     }
 
@@ -400,6 +580,9 @@ int main()
     delete foodTriangle;
     for (int i = 0; i < (int)enemies.size(); i++)
         delete enemies[i];
+
+    for (int i = 0; i < (int)walls.size(); i++)
+        delete walls[i];
 
     cout << "Ваш счет: " << score << endl << "Нажмите Enter для выхода..." << endl;
     cin.get();

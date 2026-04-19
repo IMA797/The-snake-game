@@ -1,5 +1,6 @@
 #pragma once
 #include<windows.h>
+#include<vector>
 
 class IDrawable
 {
@@ -119,6 +120,22 @@ public:
     void DrawToDC(HDC targetDC) override;
 };
 
+
+class Wall : public Figure
+{
+public:
+    Wall(int InitX, int InitY, int width, int height);
+    ~Wall();
+    void Show() override;
+    void Hide() override;
+    void DrawToDC(HDC targetDC) override;
+    int GetW() { return w; }
+    int GetH() { return h; }
+
+private:
+    int w, h;
+};
+
 class Enemy : public Figure
 {
 public:
@@ -127,5 +144,5 @@ public:
     void Show() override;          
     void Hide() override;
     void DrawToDC(HDC targetDC);    
-    void Move(int centerX, int centerY, int fieldRadius);
+    void Move(int centerX, int centerY, int fieldRadius, std::vector<Wall*>& walls);
 };
